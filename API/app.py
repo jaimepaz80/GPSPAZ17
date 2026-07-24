@@ -302,10 +302,10 @@ def generar_rinex_sincronizado(raw_path, out_path, obs_dict):
                 l1 = obs_dict[tow][sat].get('L1', 0.0)
                 c5 = obs_dict[tow][sat].get('C5', 0.0)
                 l5 = obs_dict[tow][sat].get('L5', 0.0)
-                c1_s = f"{c1:14.3f}" if c1 > 0 else "              "
-                l1_s = f"{l1:14.3f}" if l1 > 0 else "              "
-                c5_s = f"{c5:14.3f}" if c5 > 0 else "              "
-                l5_s = f"{l5:14.3f}" if l5 > 0 else "              "
+                c1_s = f"{c1:14.3f}" if c1 != 0.0 else "              "
+                l1_s = f"{l1:14.3f}" if l1 != 0.0 else "              "
+                c5_s = f"{c5:14.3f}" if c5 != 0.0 else "              "
+                l5_s = f"{l5:14.3f}" if l5 != 0.0 else "              "
                 f_out.write(f"{sat}{c1_s}  {l1_s}  {c5_s}  {l5_s}  \n")
 
 def obtener_fecha_obs(filepath):
