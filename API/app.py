@@ -653,8 +653,8 @@ def analizar_calidad_y_senales_rinex(obs_b, obs_r, max_gap_tolerado=0.05):
     sync_epochs = 0
     total_eval = 0
     
-    base_C1 = base_L1 = base_L5 = False
-    rover_C1 = rover_L1 = rover_L5 = False
+    base_C1 = base_L1 = base_C5 = base_L5 = False
+    rover_C1 = rover_L1 = rover_C5 = rover_L5 = False
     
     for tr in tows_r:
         if tr < overlap_ini or tr > overlap_fin: continue
@@ -664,43 +664,48 @@ def analizar_calidad_y_senales_rinex(obs_b, obs_r, max_gap_tolerado=0.05):
         
         if gap <= max_gap_tolerado:
             sync_epochs += 1
-            d_r = obs_r[tr]
-            d_b = obs_b[tows_b[idx]]
             
-            for s in d_r:
-                if s == '_meta' or s not in d_b: continue
-                if 'C1' in d_b[s]: base_C1 = True
-                if 'L1' in d_b[s] and 'C1' in d_b[s]: base_L1 = True
-                if 'L5' in d_b[s] and 'C5' in d_b[s]: base_L5 = True
-                
-                if 'C1' in d_r[s]: rover_C1 = True
-                if 'L1' in d_r[s] and 'C1' in d_r[s]: rover_L1 = True
-                if 'L5' in d_r[s] and 'C5' in d_r[s]: rover_L5 = True
+        d_r = obs_r[tr]
+        d_b = obs_b[tows_b[idx]]
+        
+        for s in d_r:
+            if s == '_meta' or s not in d_b: continue
+            if 'C1' in d_b[s]: base_C1 = True
+            if 'L1' in d_b[s]: base_L1 = True
+            if 'C5' in d_b[s]: base_C5 = True
+            if 'L5' in d_b[s]: base_L5 = True
+            
+            if 'C1' in d_r[s]: rover_C1 = True
+            if 'L1' in d_r[s]: rover_L1 = True
+            if 'C5' in d_r[s]: rover_C5 = True
+            if 'L5' in d_r[s]: rover_L5 = True
                 
     if total_eval == 0: return "MODO_C_SPP", 0.0, "Sin épocas en la ventana de solapamiento."
     
-    b_sig = "L1+L5" if (base_L1 and base_L5) else ("L1" if base_L1 else ("C1" if base_C1 else "NONE"))
-    r_sig = "L1+L5" if (rover_L1 and rover_L5) else ("L1" if rover_L1 else ("C1" if rover_C1 else "NONE"))
+    b_band1 = base_C1 or base_L1
+    b_band5 = base_C5 or base_L5
+    if b_band1 and b_band5: b_sig = "L1+L5"
+    elif base_L1: b_sig = "L1"
+    elif base_C1: b_sig = "C1"
+    else: b_sig = "NONE"
+    
+    r_band1 = rover_C1 or rover_L1
+    r_band5 = rover_C5 or rover_L5
+    if r_band1 and r_band5: r_sig = "L1+L5"
+    elif rover_L1: r_sig = "L1"
+    elif rover_C1: r_sig = "C1"
+    else: r_sig = "NONE"
     
     ratio_sync = sync_epochs / total_eval
     
-    if ratio_sync > 0.5:
-        if b_sig == "C1" and r_sig == "C1":
-            return "MODO_A_CODIGO", ratio_sync, "C1 y C1 (Homogéneo). Enrutando a Módulo A."
-        elif b_sig == "L1" and r_sig == "L1":
-            return "MODO_A_CODIGO", ratio_sync, "L1 y L1 (Homogéneo). Enrutando a Módulo A."
-        elif b_sig == "C1" and r_sig == "L1":
-            return "MODO_B_ASINCRONO", ratio_sync, "C1 y L1 (Heterogéneo). Enrutando a Módulo B."
-        elif b_sig == "C1" and r_sig == "L1+L5":
-            return "MODO_B_ASINCRONO", ratio_sync, "C1 y L1+L5 (Heterogéneo). Enrutando a Módulo B."
-        elif b_sig == "L1" and r_sig == "L1+L5":
-            return "MODO_B_ASINCRONO", ratio_sync, "L1 y L1+L5 (Heterogéneo). Enrutando a Módulo B."
-        elif b_sig == "L1+L5" and r_sig == "L1+L5":
-            return "MODO_C_PPK", ratio_sync, "L1+L5 y L1+L5 (Homogéneo Alta Precisión). Enrutando a Módulo C (PPK)."
-        else:
-            return "MODO_B_ASINCRONO", ratio_sync, f"Firma no tipificada ({b_sig}/{r_sig}). Fallback a Módulo B."
+    if b_sig == "L1+L5" and r_sig == "L1+L5":
+        return "MODO_C_PPK", ratio_sync, "L1+L5 y L1+L5 (Doble Frecuencia). Enrutando a Módulo C (PPK)."
+    elif b_sig == "C1" and r_sig == "C1":
+        return "MODO_A_CODIGO", ratio_sync, "C1 y C1 (Homogéneo). Enrutando a Módulo A."
+    elif b_sig == "L1" and r_sig == "L1":
+        return "MODO_A_CODIGO", ratio_sync, "L1 y L1 (Homogéneo). Enrutando a Módulo A."
     else:
-        return "MODO_B_ASINCRONO", ratio_sync, f"Alta asincronía detectada. Gap supera {max_gap_tolerado}s en la mayoría de las épocas."
+        return "MODO_B_ASINCRONO", ratio_sync, f"{b_sig} y {r_sig} (Heterogéneo). Enrutando a Módulo B."
 
 # =====================================================================
 # AISLAMIENTO DE OBSERVABLES (MÓDULOS A, B Y NUEVO C)
@@ -783,7 +788,7 @@ def aislar_diferencias_MODO_B(obs_b, obs_r):
         if len(sd_epoca) > 1: sd_suavizada[tow] = sd_epoca
     return sd_suavizada
 
-# EXTRACTOR EXCLUSIVO MÓDULO C (NUEVO PPK L1+L5) - CORREGIDO
+# EXTRACTOR EXCLUSIVO MÓDULO C (NUEVO PPK L1+L5) - CORREGIDO PARA PERMITIR FLOAT DUAL
 def aislar_diferencias_MODO_C(obs_b, obs_r):
     sd_suavizada = {}
     for tow in sorted(list(obs_r.keys())):
@@ -969,7 +974,7 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
         for s, data in sat_positions.items():
             el_b, az_b = calcular_topocentricas(data['sp_b'][0], data['sp_b'][1], data['sp_b'][2], X_base_corr, Y_base_corr, Z_base_corr)
             rho_b, iono_b, dist_b = calc_rho(data['sp_b'], X_base_corr, Y_base_corr, Z_base_corr, lat_base, lon_base, alt_base, el_b, az_b, data['wave'], tow_b)
-            base_calcs[s] = {'P': rho_b + iono_b}
+            base_calcs[s] = {'P': rho_b + iono_b, 'CP': rho_b - iono_b}
 
         H = []; L = []; R_diag = []
         
@@ -980,8 +985,9 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
             rho_r, iono_r, dist_r = calc_rho(r_data['sp_r'], X_apc, Y_apc, Z_apc, lat_r, lon_r, alt_r + h_r, el_r, az_r, r_data['wave'], tr)
             
             SD_P_calc_ref = (rho_r + iono_r) - base_calcs[r_sat]['P']
+            SD_CP_calc_ref = (rho_r - iono_r) - base_calcs.get(r_sat, {}).get('CP', 0.0)
             
-            c_ref[c] = {'dist_r': dist_r, 'SD_P_calc_ref': SD_P_calc_ref, 'sp_r': r_data['sp_r'], 'el_r': el_r, 'snr': r_data['snr'], 'sd_P': r_data['sd_P'], 'cp_r': r_data['cp_r'], 'cp_b': r_data['cp_b']}
+            c_ref[c] = {'dist_r': dist_r, 'SD_P_calc_ref': SD_P_calc_ref, 'SD_CP_calc_ref': SD_CP_calc_ref, 'sp_r': r_data['sp_r'], 'el_r': el_r, 'snr': r_data['snr'], 'sd_P': r_data['sd_P'], 'cp_r': r_data['cp_r'], 'cp_b': r_data['cp_b']}
         
         for s in sat_list:
             c = s[0]
@@ -1009,6 +1015,8 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
             
             if data['cp_r'] is not None and data['cp_b'] is not None and rc['cp_r'] is not None and rc['cp_b'] is not None:
                 wave = data['wave']
+                SD_CP_calc_i = (rho_i_r - iono_i_r) - base_calcs[s]['CP']
+                DD_CP_calc = SD_CP_calc_i - rc['SD_CP_calc_ref']
                 
                 cp_valid = True
                 if s in kf_estado['prev_cp']:
