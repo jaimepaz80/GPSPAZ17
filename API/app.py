@@ -1078,10 +1078,10 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
         kf_estado['fix_flags'] = 0 
         
         state_dict = {
-            'tow': tr, 'X_pri': X_pri, 'P_pri': P_pri, 'X_post': X_post, 'P_post': P_post
+            'tow': tr, 'X_pri': X_pri, 'P_pri': P_pri, 'X_post': X_post, 'P_post': Q_cov, 'tide': (dx_tide, dy_tide, dz_tide)
         }
         
-        return (X_post[0][0], X_post[1][0], X_post[2][0]), status, kf_estado, state_dict
+        return (X_post[0][0] - dx_tide, X_post[1][0] - dy_tide, X_post[2][0] - dz_tide), status, kf_estado, state_dict
 
     except Exception as e:
         return None, f"FAILED_EXCEPTION:_{str(e)}", kf_estado, None
@@ -1311,7 +1311,7 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
             el_b, az_b = calcular_topocentricas(info['sp_b'][0], info['sp_b'][1], info['sp_b'][2], X_base_corr, Y_base_corr, Z_base_corr)
             rho_b, iono_b_L1, _ = calc_rho(info['sp_b'], X_base_corr, Y_base_corr, Z_base_corr, lat_base, lon_base, alt_base, el_b, az_b, WAVE_L1, tow_b)
             rho_b, iono_b_L5, _ = calc_rho(info['sp_b'], X_base_corr, Y_base_corr, Z_base_corr, lat_base, lon_base, alt_base, el_b, az_b, WAVE_L5, tow_b)
-            base_calcs[s] = {'P1': rho_b + iono_b_L1, 'P5': rho_b + iono_b_L5}
+            base_calcs[s] = {'P1': rho_b + iono_b_L1, 'CP1': rho_b - iono_b_L1, 'P5': rho_b + iono_b_L5, 'CP5': rho_b - iono_b_L5}
 
         H = []; L = []; R_diag = []
         c_ref = {}
@@ -1323,8 +1323,8 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
             
             c_ref[c] = {
                 'dist_r': dist_r, 'sp_r': info['sp_r'], 'data': info['data'],
-                'SD_P1_ref': (rho_r + iono_r_L1) - base_calcs[r_sat]['P1'], 
-                'SD_P5_ref': (rho_r + iono_r_L5) - base_calcs[r_sat]['P5']
+                'SD_P1_ref': (rho_r + iono_r_L1) - base_calcs[r_sat]['P1'], 'SD_CP1_ref': (rho_r - iono_r_L1) - base_calcs[r_sat]['CP1'],
+                'SD_P5_ref': (rho_r + iono_r_L5) - base_calcs[r_sat]['P5'], 'SD_CP5_ref': (rho_r - iono_r_L5) - base_calcs[r_sat]['CP5']
             }
         
         for s in sat_list:
@@ -1352,8 +1352,8 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
                 cp1_obs = (info['data']['C1']['cp_r'] - info['data']['C1']['cp_b']) - (rc['data']['C1']['cp_r'] - rc['data']['C1']['cp_b'])
                 cp5_obs = (info['data']['C5']['cp_r'] - info['data']['C5']['cp_b']) - (rc['data']['C5']['cp_r'] - rc['data']['C5']['cp_b'])
                 
-                amb_float_1 = (cp1_obs * WAVE_L1 - ((rho_i_r - iono_i_L1) - base_calcs[s].get('CP1', 0.0) - rc.get('SD_CP1_ref', 0.0))) / WAVE_L1
-                amb_float_5 = (cp5_obs * WAVE_L5 - ((rho_i_r - iono_i_L5) - base_calcs[s].get('CP5', 0.0) - rc.get('SD_CP5_ref', 0.0))) / WAVE_L5
+                amb_float_1 = (cp1_obs * WAVE_L1 - ((rho_i_r - iono_i_L1) - base_calcs[s]['CP1'] - rc['SD_CP1_ref'])) / WAVE_L1
+                amb_float_5 = (cp5_obs * WAVE_L5 - ((rho_i_r - iono_i_L5) - base_calcs[s]['CP5'] - rc['SD_CP5_ref'])) / WAVE_L5
                 
                 Z_trans_1, _ = decorrelacion_lambda_z([[var_base_1 * 0.0001]])
                 Z_trans_5, _ = decorrelacion_lambda_z([[var_base_5 * 0.0001]])
@@ -1362,10 +1362,10 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
                 amb_restored_5 = round(amb_float_5 * Z_trans_5[0][0]) / Z_trans_5[0][0]
                 
                 if abs(amb_float_1 - amb_restored_1) < 0.20 and abs(amb_float_5 - amb_restored_5) < 0.20:
-                    L.append([(cp1_obs * WAVE_L1 - amb_restored_1 * WAVE_L1) - ((rho_i_r - iono_i_L1) - base_calcs[s].get('CP1', 0.0) - rc.get('SD_CP1_ref', 0.0))])
+                    L.append([(cp1_obs * WAVE_L1 - amb_restored_1 * WAVE_L1) - ((rho_i_r - iono_i_L1) - base_calcs[s]['CP1'] - rc['SD_CP1_ref'])])
                     H.append(dx_geom); R_diag.append(var_base_1 * 0.0001)
                     
-                    L.append([(cp5_obs * WAVE_L5 - amb_restored_5 * WAVE_L5) - ((rho_i_r - iono_i_L5) - base_calcs[s].get('CP5', 0.0) - rc.get('SD_CP5_ref', 0.0))])
+                    L.append([(cp5_obs * WAVE_L5 - amb_restored_5 * WAVE_L5) - ((rho_i_r - iono_i_L5) - base_calcs[s]['CP5'] - rc['SD_CP5_ref'])])
                     H.append(dx_geom); R_diag.append(var_base_5 * 0.0001)
                     
                     kf_estado['fix_flags'] += 1
@@ -1396,10 +1396,10 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
         kf_estado['fix_flags'] = 0 
         
         state_dict = {
-            'tow': tr, 'X_pri': X_pri, 'P_pri': P_pri, 'X_post': X_post, 'P_post': Q_cov
+            'tow': tr, 'X_pri': X_pri, 'P_pri': P_pri, 'X_post': X_post, 'P_post': Q_cov, 'tide': (dx_tide, dy_tide, dz_tide)
         }
         
-        return (X_post[0][0], X_post[1][0], X_post[2][0]), status, kf_estado, state_dict
+        return (X_post[0][0] - dx_tide, X_post[1][0] - dy_tide, X_post[2][0] - dz_tide), status, kf_estado, state_dict
 
     except Exception as e:
         return None, f"FAILED_EXCEPTION:_{str(e)}", kf_estado, None
@@ -2233,7 +2233,11 @@ def tab4_procesar():
                 
                 coords = []
                 for i in range(len(sm_states)):
-                    la, lo, al = ecef_a_geodesicas(sm_states[i][0][0], sm_states[i][1][0], sm_states[i][2][0])
+                    dx_t, dy_t, dz_t = fwd_states[i]['tide']
+                    x_crustal = sm_states[i][0][0] - dx_t
+                    y_crustal = sm_states[i][1][0] - dy_t
+                    z_crustal = sm_states[i][2][0] - dz_t
+                    la, lo, al = ecef_a_geodesicas(x_crustal, y_crustal, z_crustal)
                     nt, et = geodesicas_a_utm(la, lo, utm_h)
                     coords.append((nt, et, al, fwd_states[i]['status']))
 
