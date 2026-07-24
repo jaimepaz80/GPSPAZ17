@@ -187,7 +187,7 @@ def invert_matrix_nxn(M):
         return gauss_jordan_inverse(M)
 
 # =====================================================================
-# PARSERS Y GESTIÓN DE ARCHIVOS (INTACTOS)
+# PARSERS Y GESTIÓN DE ARCHIVOS
 # =====================================================================
 def parse_rinex_obs_completo(path):
     obs = {}
@@ -670,12 +670,12 @@ def analizar_calidad_y_senales_rinex(obs_b, obs_r, max_gap_tolerado=0.05):
             for s in d_r:
                 if s == '_meta' or s not in d_b: continue
                 if 'C1' in d_b[s]: base_C1 = True
-                if 'L1' in d_b[s] or 'C1' in d_b[s]: base_L1 = True
-                if 'L5' in d_b[s] or 'C5' in d_b[s]: base_L5 = True
+                if 'L1' in d_b[s] and 'C1' in d_b[s]: base_L1 = True
+                if 'L5' in d_b[s] and 'C5' in d_b[s]: base_L5 = True
                 
                 if 'C1' in d_r[s]: rover_C1 = True
-                if 'L1' in d_r[s] or 'C1' in d_r[s]: rover_L1 = True
-                if 'L5' in d_r[s] or 'C5' in d_r[s]: rover_L5 = True
+                if 'L1' in d_r[s] and 'C1' in d_r[s]: rover_L1 = True
+                if 'L5' in d_r[s] and 'C5' in d_r[s]: rover_L5 = True
                 
     if total_eval == 0: return "MODO_C_SPP", 0.0, "Sin épocas en la ventana de solapamiento."
     
@@ -783,7 +783,7 @@ def aislar_diferencias_MODO_B(obs_b, obs_r):
         if len(sd_epoca) > 1: sd_suavizada[tow] = sd_epoca
     return sd_suavizada
 
-# EXTRACTOR EXCLUSIVO MÓDULO C (NUEVO PPK L1+L5) - CORREGIDO PARA BASE == ROVER (DIFERENCIAS 0.0)
+# EXTRACTOR EXCLUSIVO MÓDULO C (NUEVO PPK L1+L5) - CORREGIDO
 def aislar_diferencias_MODO_C(obs_b, obs_r):
     sd_suavizada = {}
     for tow in sorted(list(obs_r.keys())):
@@ -804,7 +804,7 @@ def aislar_diferencias_MODO_C(obs_b, obs_r):
             c5_b = d_b.get('C5')
             l5_b = d_b.get('L5')
             
-            if c1_r is not None and c1_b is not None and c5_r is not None and c5_b is not None and l1_r is not None and l1_b is not None and l5_r is not None and l5_b is not None:
+            if c1_r is not None and c1_b is not None and c5_r is not None and c5_b is not None:
                 sd_epoca[s] = {
                     'C1': {
                         'sd_P': c1_r - c1_b, 'pr_b': c1_b, 'pr_r': c1_r, 
@@ -969,7 +969,7 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
         for s, data in sat_positions.items():
             el_b, az_b = calcular_topocentricas(data['sp_b'][0], data['sp_b'][1], data['sp_b'][2], X_base_corr, Y_base_corr, Z_base_corr)
             rho_b, iono_b, dist_b = calc_rho(data['sp_b'], X_base_corr, Y_base_corr, Z_base_corr, lat_base, lon_base, alt_base, el_b, az_b, data['wave'], tow_b)
-            base_calcs[s] = {'P': rho_b + iono_b, 'CP': rho_b - iono_b}
+            base_calcs[s] = {'P': rho_b + iono_b}
 
         H = []; L = []; R_diag = []
         
@@ -980,9 +980,8 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
             rho_r, iono_r, dist_r = calc_rho(r_data['sp_r'], X_apc, Y_apc, Z_apc, lat_r, lon_r, alt_r + h_r, el_r, az_r, r_data['wave'], tr)
             
             SD_P_calc_ref = (rho_r + iono_r) - base_calcs[r_sat]['P']
-            SD_CP_calc_ref = (rho_r - iono_r) - base_calcs[r_sat]['CP']
             
-            c_ref[c] = {'dist_r': dist_r, 'SD_P_calc_ref': SD_P_calc_ref, 'SD_CP_calc_ref': SD_CP_calc_ref, 'sp_r': r_data['sp_r'], 'el_r': el_r, 'snr': r_data['snr'], 'sd_P': r_data['sd_P'], 'cp_r': r_data['cp_r'], 'cp_b': r_data['cp_b']}
+            c_ref[c] = {'dist_r': dist_r, 'SD_P_calc_ref': SD_P_calc_ref, 'sp_r': r_data['sp_r'], 'el_r': el_r, 'snr': r_data['snr'], 'sd_P': r_data['sd_P'], 'cp_r': r_data['cp_r'], 'cp_b': r_data['cp_b']}
         
         for s in sat_list:
             c = s[0]
@@ -993,10 +992,7 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
             rho_i_r, iono_i_r, dist_i_r = calc_rho(data['sp_r'], X_apc, Y_apc, Z_apc, lat_r, lon_r, alt_r + h_r, el_i_r, az_i_r, data['wave'], tr)
             
             SD_P_calc_i = (rho_i_r + iono_i_r) - base_calcs[s]['P']
-            SD_CP_calc_i = (rho_i_r - iono_i_r) - base_calcs[s]['CP']
-            
             DD_P_calc = SD_P_calc_i - rc['SD_P_calc_ref']
-            DD_CP_calc = SD_CP_calc_i - rc['SD_CP_calc_ref']
             
             dx_geom = [
                 -(data['sp_r'][0] - X_apc) / dist_i_r - (-(rc['sp_r'][0] - X_apc) / rc['dist_r']),
@@ -1307,7 +1303,7 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
             el_b, az_b = calcular_topocentricas(info['sp_b'][0], info['sp_b'][1], info['sp_b'][2], X_base_corr, Y_base_corr, Z_base_corr)
             rho_b, iono_b_L1, _ = calc_rho(info['sp_b'], X_base_corr, Y_base_corr, Z_base_corr, lat_base, lon_base, alt_base, el_b, az_b, WAVE_L1, tow_b)
             rho_b, iono_b_L5, _ = calc_rho(info['sp_b'], X_base_corr, Y_base_corr, Z_base_corr, lat_base, lon_base, alt_base, el_b, az_b, WAVE_L5, tow_b)
-            base_calcs[s] = {'P1': rho_b + iono_b_L1, 'CP1': rho_b - iono_b_L1, 'P5': rho_b + iono_b_L5, 'CP5': rho_b - iono_b_L5}
+            base_calcs[s] = {'P1': rho_b + iono_b_L1, 'P5': rho_b + iono_b_L5}
 
         H = []; L = []; R_diag = []
         c_ref = {}
@@ -1319,8 +1315,8 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
             
             c_ref[c] = {
                 'dist_r': dist_r, 'sp_r': info['sp_r'], 'data': info['data'],
-                'SD_P1_ref': (rho_r + iono_r_L1) - base_calcs[r_sat]['P1'], 'SD_CP1_ref': (rho_r - iono_r_L1) - base_calcs[r_sat]['CP1'],
-                'SD_P5_ref': (rho_r + iono_r_L5) - base_calcs[r_sat]['P5'], 'SD_CP5_ref': (rho_r - iono_r_L5) - base_calcs[r_sat]['CP5']
+                'SD_P1_ref': (rho_r + iono_r_L1) - base_calcs[r_sat]['P1'], 
+                'SD_P5_ref': (rho_r + iono_r_L5) - base_calcs[r_sat]['P5']
             }
         
         for s in sat_list:
@@ -1344,12 +1340,12 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
             L.append([(info['data']['C5']['sd_P'] - rc['data']['C5']['sd_P']) - ((rho_i_r + iono_i_L5) - base_calcs[s]['P5'] - rc['SD_P5_ref'])])
             H.append(dx_geom); R_diag.append(var_base_5 * 9.0)
             
-            if info['data']['C1']['cp_r'] is not None and info['data']['C5']['cp_r'] is not None:
+            if info['data']['C1'].get('cp_r') is not None and info['data']['C5'].get('cp_r') is not None:
                 cp1_obs = (info['data']['C1']['cp_r'] - info['data']['C1']['cp_b']) - (rc['data']['C1']['cp_r'] - rc['data']['C1']['cp_b'])
                 cp5_obs = (info['data']['C5']['cp_r'] - info['data']['C5']['cp_b']) - (rc['data']['C5']['cp_r'] - rc['data']['C5']['cp_b'])
                 
-                amb_float_1 = (cp1_obs * WAVE_L1 - ((rho_i_r - iono_i_L1) - base_calcs[s]['CP1'] - rc['SD_CP1_ref'])) / WAVE_L1
-                amb_float_5 = (cp5_obs * WAVE_L5 - ((rho_i_r - iono_i_L5) - base_calcs[s]['CP5'] - rc['SD_CP5_ref'])) / WAVE_L5
+                amb_float_1 = (cp1_obs * WAVE_L1 - ((rho_i_r - iono_i_L1) - base_calcs[s].get('CP1', 0.0) - rc.get('SD_CP1_ref', 0.0))) / WAVE_L1
+                amb_float_5 = (cp5_obs * WAVE_L5 - ((rho_i_r - iono_i_L5) - base_calcs[s].get('CP5', 0.0) - rc.get('SD_CP5_ref', 0.0))) / WAVE_L5
                 
                 Z_trans_1, _ = decorrelacion_lambda_z([[var_base_1 * 0.0001]])
                 Z_trans_5, _ = decorrelacion_lambda_z([[var_base_5 * 0.0001]])
@@ -1358,10 +1354,10 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
                 amb_restored_5 = round(amb_float_5 * Z_trans_5[0][0]) / Z_trans_5[0][0]
                 
                 if abs(amb_float_1 - amb_restored_1) < 0.20 and abs(amb_float_5 - amb_restored_5) < 0.20:
-                    L.append([(cp1_obs * WAVE_L1 - amb_restored_1 * WAVE_L1) - ((rho_i_r - iono_i_L1) - base_calcs[s]['CP1'] - rc['SD_CP1_ref'])])
+                    L.append([(cp1_obs * WAVE_L1 - amb_restored_1 * WAVE_L1) - ((rho_i_r - iono_i_L1) - base_calcs[s].get('CP1', 0.0) - rc.get('SD_CP1_ref', 0.0))])
                     H.append(dx_geom); R_diag.append(var_base_1 * 0.0001)
                     
-                    L.append([(cp5_obs * WAVE_L5 - amb_restored_5 * WAVE_L5) - ((rho_i_r - iono_i_L5) - base_calcs[s]['CP5'] - rc['SD_CP5_ref'])])
+                    L.append([(cp5_obs * WAVE_L5 - amb_restored_5 * WAVE_L5) - ((rho_i_r - iono_i_L5) - base_calcs[s].get('CP5', 0.0) - rc.get('SD_CP5_ref', 0.0))])
                     H.append(dx_geom); R_diag.append(var_base_5 * 0.0001)
                     
                     kf_estado['fix_flags'] += 1
