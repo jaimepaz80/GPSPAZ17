@@ -783,7 +783,7 @@ def aislar_diferencias_MODO_B(obs_b, obs_r):
         if len(sd_epoca) > 1: sd_suavizada[tow] = sd_epoca
     return sd_suavizada
 
-# EXTRACTOR EXCLUSIVO MÓDULO C (NUEVO PPK L1+L5)
+# EXTRACTOR EXCLUSIVO MÓDULO C (NUEVO PPK L1+L5) - CORREGIDO PARA BASE == ROVER (DIFERENCIAS 0.0)
 def aislar_diferencias_MODO_C(obs_b, obs_r):
     sd_suavizada = {}
     for tow in sorted(list(obs_r.keys())):
@@ -794,10 +794,17 @@ def aislar_diferencias_MODO_C(obs_b, obs_r):
             if s == '_meta' or s not in obs_b[tow]: continue
             d_b = obs_b[tow][s]
             
-            c1_r, l1_r, c5_r, l5_r = d_r.get('C1'), d_r.get('L1'), d_r.get('C5'), d_r.get('L5')
-            c1_b, l1_b, c5_b, l5_b = d_b.get('C1'), d_b.get('L1'), d_b.get('C5'), d_b.get('L5')
+            c1_r = d_r.get('C1')
+            l1_r = d_r.get('L1')
+            c5_r = d_r.get('C5')
+            l5_r = d_r.get('L5')
             
-            if c1_r and c1_b and c5_r and c5_b and l1_r and l1_b and l5_r and l5_b:
+            c1_b = d_b.get('C1')
+            l1_b = d_b.get('L1')
+            c5_b = d_b.get('C5')
+            l5_b = d_b.get('L5')
+            
+            if c1_r is not None and c1_b is not None and c5_r is not None and c5_b is not None and l1_r is not None and l1_b is not None and l5_r is not None and l5_b is not None:
                 sd_epoca[s] = {
                     'C1': {
                         'sd_P': c1_r - c1_b, 'pr_b': c1_b, 'pr_r': c1_r, 
