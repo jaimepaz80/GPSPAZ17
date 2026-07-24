@@ -185,6 +185,7 @@ def invert_matrix_nxn(M):
         return matmul(transpose_matrix(L_inv), L_inv)
     except:
         return gauss_jordan_inverse(M)
+
 # =====================================================================
 # PARSERS Y GESTIÓN DE ARCHIVOS (INTACTOS)
 # =====================================================================
@@ -319,7 +320,6 @@ def obtener_fecha_obs(filepath):
                         return year, int(partes[1]), int(partes[2]), int(partes[3]), int(partes[4]), float(partes[5])
                     except: pass
     return None
-
 # =====================================================================
 # PRODUCTOS IGS Y EFEMÉRIDES (HÍBRIDO NAV / SP3)
 # =====================================================================
@@ -813,6 +813,7 @@ def aislar_diferencias_MODO_C(obs_b, obs_r):
                 }
         if len(sd_epoca) > 2: sd_suavizada[tow] = sd_epoca
     return sd_suavizada
+
 # =====================================================================
 # VÍA 1 -> MÓDULO A: MOTOR EKF + LAMBDA + RTS (INTACTO DE app (8).py)
 # =====================================================================
@@ -1073,7 +1074,6 @@ def procesar_ekF_lambda(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_mask)
 
     except Exception as e:
         return None, f"FAILED_EXCEPTION:_{str(e)}", kf_estado, None
-
 # =====================================================================
 # VÍA 2 -> MÓDULO B: MOTOR IRLS CLÁSICO (ASINCRÓNICO / CÓDIGO PURO)
 # Clonado exactamente de la versión antigua validada para teléfonos distintos
@@ -1090,7 +1090,6 @@ def calcular_IRLS_MODO_B(sd_epoca, nav, X_b, Y_b, Z_b, tr, mask_angle):
         for s, d in sd_epoca.items():
             if s == '_meta' or d['sd_P'] is None: continue 
             tau = d['pr_r'] / C_LIGHT
-            # CÁLCULO ÚNICO DE POSICIÓN SATELITAL (SINCRONÍA FORZADA)
             sp = calcular_posicion_satelite_wgs84(seleccionar_efemeride_optima(nav.get(s), tr-tau), tr-tau, tau, s[0])
             if sp:
                 el_r, az_r = calcular_topocentricas(sp[0], sp[1], sp[2], X_iter, Y_iter, Z_iter)
@@ -1248,7 +1247,7 @@ def procesar_ekF_PPK_L1_L5(sd_epoca, nav, sp3, kf_estado, tr, mask_angle, snr_ma
         
         sat_positions = {}
         for s, d in sd_epoca.items():
-            if s == '_meta' or s == '_tow_b' or 'sys' not in d: continue 
+            if s == '_meta' or s == '_tow_b' or 'C1' not in d or d['C1']['sd_P'] is None: continue 
             
             tau_r = d['C1']['pr_r'] / C_LIGHT 
             tau_b = d['C1']['pr_b'] / C_LIGHT
@@ -1846,7 +1845,6 @@ def tab3_calibrar():
             X_b, Y_b, Z_b = geodesicas_a_ecef(lat_b, lon_b, utm_c + h_b)
             X_bg, Y_bg, Z_bg = geodesicas_a_ecef(lat_b, lon_b, utm_c)
 
-            # --- RUTA 1: MÓDULOS HOMOGÉNEOS A (CÓDIGO/FASE SIMPLE) Y C (PPK L1+L5) ---
             if modo_str in ["MODO_A_CODIGO", "MODO_C_PPK"]:
                 yield f"> [SISTEMA] Iniciando Búsqueda Determinista | {modo_str}...\n"
                 
@@ -1978,11 +1976,7 @@ def tab3_calibrar():
                     else:
                         m_span /= 2.0; cp_span /= 2.0; ca_span /= 2.0; snr_span /= 2.0; gap_span /= 2.0
 
-            # --- RUTA 2: FASE PRESENTE O ASINCRONÍA VAN AL MÓDULO B ---
             else:
-                # =========================================================
-                # MÓDULO B: LÓGICA IRLS CLÁSICA (ASINCRÓNICO / TELÉFONOS DISTINTOS)
-                # =========================================================
                 yield f"> [SISTEMA] Iniciando Búsqueda Determinista | MÓDULO B (IRLS Clásico Termux)...\n"
                 p_b_raw = leer_estado('base_raw')
                 p_r_raw = os.path.join(UPLOAD_FOLDER, 'rover_calibracion_raw.obs')
@@ -2077,7 +2071,6 @@ def tab3_calibrar():
                     else:
                         m_span /= 2.0; cp_span /= 2.0; ca_span /= 2.0
             
-            # GUARDADO FINAL COMÚN A, B Y C
             if best_rmse != float('inf'):
                 guardar_estado('opt_mask', best_params['mask'])
                 guardar_estado('opt_cp', best_params['cp'])
@@ -2180,9 +2173,6 @@ def tab4_procesar():
             X_bg, Y_bg, Z_bg = geodesicas_a_ecef(lat_b, lon_b, utm_c)
 
             if modo_str in ["MODO_A_CODIGO", "MODO_C_PPK"]:
-                # =========================================================
-                # MÓDULOS A Y C: LÓGICA EKF (HOMOGÉNEO / PPK)
-                # =========================================================
                 yield f"\n> [SISTEMA] Iniciando Procesamiento DGPS | {modo_str}...\n"
                 if sp3: yield "[PROGRESO] Órbitas Precisas SP3 acopladas con éxito...\n"
                 
@@ -2237,9 +2227,6 @@ def tab4_procesar():
                     coords.append((nt, et, al, fwd_states[i]['status']))
 
             else:
-                # =========================================================
-                # MÓDULO B: LÓGICA IRLS CLÁSICA (ASINCRÓNICO / TELÉFONOS DISTINTOS)
-                # =========================================================
                 yield f"\n> [SISTEMA] Iniciando Procesamiento DGPS | MÓDULO B (IRLS Clásico Termux)...\n"
                 yield "[PROGRESO] Extrayendo Observables Asincrónicas...\n"
                 
@@ -2270,9 +2257,6 @@ def tab4_procesar():
                         
                 if not coords: yield "\n> [ERROR] Fracaso algorítmico total en Inversión NxN.\n"; return
 
-            # =========================================================
-            # CALIDAD, FILTRADO FINAL Y APLICACIÓN DE "SITE CALIBRATION"
-            # =========================================================
             res_estadistica = estadistica_desacoplada(coords, p_cp, p_ca, err_hor_max, err_ver_max)
             if res_estadistica[0] is None:
                 yield "\n> [ERROR] Operación Abortada: El 100% de las épocas superan el Error Máximo configurado.\n"; return
