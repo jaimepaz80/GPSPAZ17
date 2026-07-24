@@ -670,12 +670,12 @@ def analizar_calidad_y_senales_rinex(obs_b, obs_r, max_gap_tolerado=0.05):
             for s in d_r:
                 if s == '_meta' or s not in d_b: continue
                 if 'C1' in d_b[s]: base_C1 = True
-                if 'L1' in d_b[s]: base_L1 = True
-                if 'L5' in d_b[s]: base_L5 = True
+                if 'L1' in d_b[s] or 'C1' in d_b[s]: base_L1 = True
+                if 'L5' in d_b[s] or 'C5' in d_b[s]: base_L5 = True
                 
                 if 'C1' in d_r[s]: rover_C1 = True
-                if 'L1' in d_r[s]: rover_L1 = True
-                if 'L5' in d_r[s]: rover_L5 = True
+                if 'L1' in d_r[s] or 'C1' in d_r[s]: rover_L1 = True
+                if 'L5' in d_r[s] or 'C5' in d_r[s]: rover_L5 = True
                 
     if total_eval == 0: return "MODO_C_SPP", 0.0, "Sin épocas en la ventana de solapamiento."
     
